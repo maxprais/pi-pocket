@@ -174,16 +174,20 @@ su - pocket -c "cd pi-pocket && git pull && npm ci" && systemctl restart pi-pock
 - Resend sends from the subdomain `mail.maxprais.com`, not the root domain, which already has Microsoft 365 mail and its own SPF record. Resend's DKIM, SPF, and return-path records were added at GoDaddy and checked with `dig` against `8.8.8.8`.
 - DigitalOcean blocks outbound SMTP on ports 25, 465, and 587 (checked from the server with `bash -c "</dev/tcp/smtp.resend.com/PORT"`: only 2465 and 2587 were open), so the address uses Resend's port `2465`: `smtps://resend:KEY@smtp.resend.com:2465`. With 465 the sign-in page loaded forever.
 - The SMTP settings are in `/etc/pi-pocket.env` (mode 600, owned by root), which the unit loads with `EnvironmentFile=`. The API key was typed on the server by the owner, so it never appeared in a chat or in the repo.
-- Pushed to the fork's `main` (`3b7babc`), then on the server: `git pull --ff-only`, `npm ci`, `systemctl restart pi-pocket`.
+- Sign-in was checked end to end: the link led to the code page, the code arrived at the owner's address, and entering it signed the owner in. The owner token was rotated again afterwards, because the link had been pasted into a chat; the old link answers `401`.
+- Pushed to the fork's `main` (`3b7babc`, then `12dc7ea` for the mail timeouts), then on the server: `git pull --ff-only`, `npm ci`, `systemctl restart pi-pocket`.
 
 Checked: the service is `active` with no start error, and the login token sent as a `Bearer` header now answers `401`, so email sign-in is on.
 
+### 11. Sign in from the homepage with an email
+
+Pushed as `aab99f6` and deployed (`git pull --ff-only`, `systemctl restart pi-pocket`). The homepage takes an email address as well as a link, token, or invite code: an account that uses it gets a code, and the code signs in with no link. The owner's address is `PI_POCKET_OWNER_EMAIL`; a guest's is the one they gave when they joined. An address with no account gets the same page and a similar delay, so the page never says which addresses have accounts. Checked on the server: `/login/email` answers, a bad address gets `400`, and `signin.js` carries the form. Because the owner can now sign in with only an email code, the owner's email account is the key: turn on 2-step verification for it.
+
 ## Still to do
 
-1. Sign in from a browser with the owner link and the emailed code, and check the email arrives (look in spam the first time).
-2. Try a guest invite end to end, to check a guest's code goes to the email they typed.
-3. Optional: a DigitalOcean Cloud Firewall as a second layer in front of `ufw`.
-4. Optional: reboot the server once, for the Ubuntu updates that wait for a restart.
+1. Try a guest invite end to end, to check a guest's code goes to the email they typed.
+2. Optional: a DigitalOcean Cloud Firewall as a second layer in front of `ufw`.
+3. Optional: reboot the server once, for the Ubuntu updates that wait for a restart.
 
 ## Operating it
 
