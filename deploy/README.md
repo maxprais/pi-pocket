@@ -189,6 +189,10 @@ Pushed as `aab99f6` and deployed (`git pull --ff-only`, `systemctl restart pi-po
 - **DigitalOcean Cloud Firewall** `pi-pocket-web`, applied to the `agent` Droplet: inbound SSH 22, HTTP 80, and HTTPS 443 from anywhere; outbound as DigitalOcean's defaults (ICMP, all TCP, all UDP). It sits in front of `ufw` as a second layer. Checked from outside: SSH works, HTTPS answers `200`, HTTP answers `308`, and ports 8787, 3000, 25, and 5432 are closed.
 - **Reboot:** `/var/run/reboot-required` did not exist, so no update needed it, but one was done to prove that Pi Pocket and Caddy start on their own.
 
+### 13. Renamed to Max's Agent
+
+Pushed as `6651c0d` and deployed (`git pull --ff-only`, `systemctl restart pi-pocket`). The browser app, the sign-in and join pages, and the sign-in code email say "Max's Agent". The sender's display name is in `/etc/pi-pocket.env` (`PI_POCKET_MAIL_FROM="Max's Agent <pocket@mail.maxprais.com>"`); only that line changed, and the address is the same, so the Resend domain needs nothing. Unchanged on purpose: code comments, server log lines, the `PI_POCKET_*` settings, the service and folder names, and the extension gallery's version messages. A phone's home-screen icon keeps the old name until the app is removed and added again.
+
 ## Still to do
 
 1. Try a guest invite end to end, to check a guest's code goes to the email they typed.
