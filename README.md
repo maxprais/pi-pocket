@@ -124,6 +124,7 @@ For a server on the public internet, Pi Pocket can ask for a code sent to the pe
 
 Put them in a file that only the service reads (systemd's `EnvironmentFile=`), not in the unit. While it is on:
 
+- On the homepage, someone who has an account types their email and gets a code, with no link needed: the owner's address is `PI_POCKET_OWNER_EMAIL`, and a guest's is the one they gave when they joined. The page says the same thing whether or not an account uses the address, and an unknown address takes as long to answer as a real one, so nobody can find out which addresses have accounts. A client gets 10 tries in ten minutes. An invite cannot be used with an address that already has an account. So the owner's account is as safe as the owner's email: turn on 2-step verification for it.
 - A sign-in link (or invite) takes a device to a page for a 6-digit code. The code works for 10 minutes and takes 5 tries; one address gets 5 codes an hour.
 - The code makes a session that lasts 30 days. The link's token itself signs nothing in, as a cookie or as a `Bearer` header, so the code cannot be skipped by setting the cookie by hand. Everyone signs in again when it is turned on.
 - A guest gives an email when they join; their codes go there. Whoever holds a link cannot choose where the code goes. Guests invited before it was turned on have no email: remove and invite them again.

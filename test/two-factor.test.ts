@@ -284,3 +284,131 @@ test("a guest joins with an email, and the code goes there, not to the owner", a
     assert.equal(inbox.at(-1)?.to, "alex@example.com");
     assert.equal(cookiesOf(joined).has("pocket_auth"), false);
 });
+
+const form = { "content-type": "application/x-www-form-urlencoded" };
+
+/** An email typed on the homepage, from a client of its own. */
+const typeEmail = (email: string, client: string) =>
+    fetch(`${base}/login/email`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { ...form, "x-forwarded-for": client },
+        body: new URLSearchParams({ email }),
+    });
+
+const codeFor = async (jar: Map<string, string>, code: string) =>
+    fetch(`${base}/login/verify`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { ...form, cookie: header(jar) },
+        body: new URLSearchParams({ action: "verify", code }),
+    });
+
+test("an email typed on the homepage mails a code, and the code signs the owner in", async () => {
+    inbox = [];
+    const response = await typeEmail("Owner@Example.com", "10.0.0.1");
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get("location"), "/login/verify");
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0]?.to, "owner@example.com");
+
+    const jar = cookiesOf(response);
+    const page = await (
+        await fetch(`${base}/login/verify`, { headers: { cookie: header(jar) } })
+    ).text();
+
+    assert.match(page, /If an account uses o\*\*\*@example\.com/);
+
+    const signedIn = await codeFor(jar, lastCode());
+
+    assert.equal(signedIn.status, 303);
+    cookiesOf(signedIn, jar);
+    assert.equal((await fetch(`${base}/api/me`, { headers: { cookie: header(jar) } })).status, 200);
+});
+
+test("an address with no account looks the same, sends nothing, and no code works", async () => {
+    inbox = [];
+    const started = Date.now();
+    const response = await typeEmail("nobody@example.com", "10.0.0.2");
+
+    assert.ok(Date.now() - started >= 1400, "it takes about as long as a send does");
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get("location"), "/login/verify");
+    assert.equal(inbox.length, 0, "no mail goes to an address with no account");
+
+    const jar = cookiesOf(response);
+    const page = await (
+        await fetch(`${base}/login/verify`, { headers: { cookie: header(jar) } })
+    ).text();
+
+    assert.match(page, /If an account uses n\*\*\*@example\.com/);
+
+    for (const code of ["000000", "123456", lastCode() || "654321"]) {
+        const wrong = await codeFor(jar, code);
+
+        assert.equal(wrong.status, 401);
+        assert.equal(cookiesOf(wrong, new Map(jar)).has("pocket_auth"), false);
+    }
+
+    const resend = await fetch(`${base}/login/verify`, {
+        method: "POST",
+        headers: { ...form, cookie: header(jar) },
+        body: new URLSearchParams({ action: "resend" }),
+    });
+
+    assert.equal(resend.status, 200);
+    assert.equal(inbox.length, 0);
+});
+
+test("a guest signs in with the email they joined with, and the code goes there", async () => {
+    inbox = [];
+    const response = await typeEmail("alex@example.com", "10.0.0.3");
+
+    assert.equal(response.headers.get("location"), "/login/verify");
+    assert.equal(inbox.at(-1)?.to, "alex@example.com");
+
+    const jar = cookiesOf(response);
+    const signedIn = await codeFor(jar, lastCode());
+
+    cookiesOf(signedIn, jar);
+
+    const me = await fetch(`${base}/api/me`, { headers: { cookie: header(jar) } });
+
+    assert.equal(me.status, 200);
+    assert.notEqual(((await me.json()) as { role?: string }).role, "owner");
+});
+
+test("an invite cannot take an address that already has an account", async () => {
+    const { Auth } = await import("../src/server/auth.ts");
+    const code = new Auth(app.config).createInvite(ownerOf(app)).code;
+
+    for (const taken of ["owner@example.com", "alex@example.com"]) {
+        const response = await fetch(`${base}/join/${code}`, {
+            method: "POST",
+            redirect: "manual",
+            headers: form,
+            body: new URLSearchParams({ name: "Sam", email: taken }),
+        });
+
+        assert.equal(response.status, 400);
+    }
+
+    assert.ok(app.config.invite(code), "the invite is still there to use");
+});
+
+test("a bad address is refused, and one client gets only a few tries", async () => {
+    assert.equal((await typeEmail("not an email", "10.0.0.4")).status, 400);
+
+    const statuses: number[] = [];
+
+    for (let i = 0; i < 12; i += 1) {
+        statuses.push((await typeEmail("owner@example.com", "10.0.0.5")).status);
+    }
+
+    assert.equal(
+        statuses.slice(0, 10).every((status) => status === 303),
+        true,
+    );
+    assert.deepEqual(statuses.slice(10), [429, 429]);
+});

@@ -143,6 +143,22 @@ export class Auth {
         return this.#config.userByToken(token);
     }
 
+    /**
+     * Whose account an email address is: the owner's, when it is the address in the server's settings, or whoever gave it
+     * when they joined. Only while email sign-in is on.
+     */
+    userByEmail(email: string): User | undefined {
+        if (this.twoFactor === undefined) {
+            return undefined;
+        }
+
+        if (email === this.twoFactor.ownerEmail) {
+            return this.#config.users.find((user) => user.role === "owner");
+        }
+
+        return this.#config.users.find((user) => user.role !== "owner" && user.email === email);
+    }
+
     /** After the emailed code: a session for the user, and the browser's cookie for it. */
     startSession(request: IncomingMessage, response: ServerResponse, userId: string): void {
         const token = this.#config.addSession(userId);

@@ -85,11 +85,112 @@ async function askForCode(
     response.end();
 }
 
-function codePage(where: string, notice = ""): string {
+function codePage(where: string, notice = "", generic = false): string {
+    const says = generic
+        ? `If an account uses ${escapeHtml(where)}, a 6-digit code is on its way. It works for 10 minutes.`
+        : `A 6-digit code went to ${escapeHtml(where)}. It works for 10 minutes.`;
+
     return page(
         "Enter your code · Pi Pocket",
-        `<h1>Check your email</h1><p>A 6-digit code went to ${escapeHtml(where)}. It works for 10 minutes.</p>${notice}<form method="post" action="/login/verify"><input type="hidden" name="action" value="verify"><label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="8" autofocus required></label><button type="submit">Sign in</button></form><form method="post" action="/login/verify"><input type="hidden" name="action" value="resend"><button type="submit">Send a new code</button></form>`,
+        `<h1>Check your email</h1><p>${says}</p>${notice}<form method="post" action="/login/verify"><input type="hidden" name="action" value="verify"><label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="8" autofocus required></label><button type="submit">Sign in</button></form><form method="post" action="/login/verify"><input type="hidden" name="action" value="resend"><button type="submit">Send a new code</button></form>`,
     );
+}
+
+/** The most email sign-ins one address of the network may start in ten minutes. */
+const MAX_EMAIL_LOGINS = 10;
+const emailLogins = new Map<string, number[]>();
+
+/** Who is asking, as the proxy in front saw them: the last address it added, or the socket's own. */
+function clientOf(request: IncomingMessage): string {
+    const forwarded = String(request.headers["x-forwarded-for"] ?? "")
+        .split(",")
+        .at(-1)
+        ?.trim();
+
+    return forwarded || request.socket.remoteAddress || "unknown";
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * `/login/email`: sign in from the homepage with an email address. If an account uses it, a code goes there; either way
+ * the browser lands on the same page, so nobody can find out which addresses have accounts. The answer also takes about
+ * as long, because a send does.
+ */
+export async function emailLogin(
+    auth: Auth,
+    request: IncomingMessage,
+    response: ServerResponse,
+): Promise<void> {
+    if (request.method !== "POST") {
+        response.writeHead(303, { location: "/" });
+        response.end();
+
+        return;
+    }
+
+    if (crossSite(request)) {
+        throw new HttpError(403, "Sign in from Pi Pocket's own page.");
+    }
+
+    const twoFactor = auth.twoFactor;
+
+    if (twoFactor === undefined) {
+        return send(
+            response,
+            404,
+            page(
+                "Pi Pocket",
+                "<h1>Email sign-in is off</h1><p>Use the sign-in link Pi Pocket printed, or an invite.</p>",
+            ),
+            "text/html; charset=utf-8",
+        );
+    }
+
+    const now = Date.now();
+    const who = clientOf(request);
+    const recent = (emailLogins.get(who) ?? []).filter((at) => now - at < 10 * 60 * 1000);
+
+    emailLogins.set(who, [...recent, now]);
+
+    if (recent.length >= MAX_EMAIL_LOGINS) {
+        return send(
+            response,
+            429,
+            page("Pi Pocket", "<h1>Too many tries</h1><p>Wait ten minutes, then try again.</p>"),
+            "text/html; charset=utf-8",
+        );
+    }
+
+    const form = new URLSearchParams((await readBody(request, 10_000)).toString("utf8"));
+    const email = cleanEmail(form.get("email") ?? "");
+
+    if (email === undefined) {
+        return send(
+            response,
+            400,
+            page("Pi Pocket", "<h1>Not an email address</h1><p>Go back and check it.</p>"),
+            "text/html; charset=utf-8",
+        );
+    }
+
+    const user = auth.userByEmail(email);
+    let id: string | undefined;
+
+    if (user !== undefined) {
+        try {
+            id = await twoFactor.begin(user.id, email, "/", true);
+        } catch (error) {
+            // Said in the log, not on the page: the page must not tell an address with an account from one without.
+            console.error(`Pi Pocket could not send a sign-in code: ${(error as Error).message}`);
+        }
+    } else {
+        await sleep(1500);
+    }
+
+    setPendingCookie(request, response, id ?? twoFactor.decoy(email));
+    response.writeHead(303, { location: "/login/verify" });
+    response.end();
 }
 
 /** `/login/verify`: the page that takes the emailed code, and signs the browser in when it is right. */
@@ -101,6 +202,7 @@ export async function verify(
     const twoFactor = auth.twoFactor;
     const id = auth.pending(request);
     const where = twoFactor === undefined || id === undefined ? undefined : twoFactor.where(id);
+    const generic = twoFactor !== undefined && id !== undefined && twoFactor.generic(id);
 
     if (twoFactor === undefined || id === undefined || where === undefined) {
         return send(
@@ -115,7 +217,7 @@ export async function verify(
     }
 
     if (request.method !== "POST") {
-        return send(response, 200, codePage(where), "text/html; charset=utf-8", {
+        return send(response, 200, codePage(where, "", generic), "text/html; charset=utf-8", {
             "referrer-policy": "no-referrer",
         });
     }
@@ -137,7 +239,7 @@ export async function verify(
             return send(
                 response,
                 502,
-                codePage(where, "<p>The email did not go. Try again in a minute.</p>"),
+                codePage(where, "<p>The email did not go. Try again in a minute.</p>", generic),
                 "text/html; charset=utf-8",
             );
         }
@@ -150,7 +252,7 @@ export async function verify(
         return send(
             response,
             result === "gone" ? 410 : 200,
-            codePage(where, notice),
+            codePage(where, notice, generic),
             "text/html; charset=utf-8",
         );
     }
@@ -175,7 +277,7 @@ export async function verify(
             );
         }
 
-        return send(response, 401, codePage(where, notice), "text/html; charset=utf-8");
+        return send(response, 401, codePage(where, notice, generic), "text/html; charset=utf-8");
     }
 
     auth.startSession(request, response, result.userId);
@@ -269,6 +371,22 @@ export async function join(
                 page(
                     "Join Pi Pocket",
                     "<h1>Email needed</h1><p>Go back and enter an email address. Pi Pocket sends a sign-in code there.</p>",
+                ),
+                "text/html; charset=utf-8",
+            );
+        }
+
+        if (
+            auth.twoFactor !== undefined &&
+            email !== undefined &&
+            auth.userByEmail(email) !== undefined
+        ) {
+            return send(
+                response,
+                400,
+                page(
+                    "Join Pi Pocket",
+                    "<h1>Email already in use</h1><p>Go back and use a different email address.</p>",
                 ),
                 "text/html; charset=utf-8",
             );

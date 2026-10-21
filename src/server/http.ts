@@ -13,7 +13,7 @@ import { extensionFile } from "./http/extension-routes.ts";
 import { hookRoute } from "./http/hook-routes.ts";
 import { serveApp, serveFile, VENDOR, WEB } from "./http/assets.ts";
 import { type HttpOptions, json } from "./http/io.ts";
-import { join as joinPage, login, sharePage, verify } from "./http/sign-in.ts";
+import { emailLogin, join as joinPage, login, sharePage, verify } from "./http/sign-in.ts";
 import { themeFile } from "./http/theme-routes.ts";
 import { settingsFrom, smtpMailer, TwoFactor } from "./two-factor.ts";
 
@@ -81,6 +81,10 @@ export function createHandler(options: HttpOptions) {
                     VENDOR[parts[1]]!,
                     "text/javascript; charset=utf-8",
                 );
+            }
+
+            if (parts[0] === "login" && parts[1] === "email") {
+                return await emailLogin(auth, request, response);
             }
 
             if (parts[0] === "login" && parts[1] === "verify") {

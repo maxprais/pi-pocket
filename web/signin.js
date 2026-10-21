@@ -13,6 +13,23 @@ export function SignIn() {
             return;
         }
 
+        // An email address: the server mails a code if an account uses it, and the next page takes the code.
+        if (/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(text)) {
+            const form = document.createElement("form");
+            const field = document.createElement("input");
+
+            form.method = "post";
+            form.action = "/login/email";
+            field.type = "hidden";
+            field.name = "email";
+            field.value = text;
+            form.append(field);
+            document.body.append(form);
+            form.submit();
+
+            return;
+        }
+
         try {
             const url = new URL(text, location.origin);
 
@@ -38,15 +55,15 @@ export function SignIn() {
         <div class="pi big">π</div>
         <h1>Pi Pocket</h1>
         <p class="muted">
-            Open the sign-in link Pi Pocket printed when it started, or an invite from a signed-in device. You can also paste the link, the token, or an invite code here.
+            Enter your email and Pi Pocket sends you a code. You can also open the sign-in link Pi Pocket printed, or an invite, and paste the link, the token, or an invite code here.
         </p>
         <div class="row">
             <input
                 value=${value}
-                placeholder="Link, token, or invite code"
+                placeholder="Email, link, token, or invite code"
                 autocapitalize="none"
                 autocorrect="off"
-                autocomplete="off"
+                autocomplete="email"
                 spellcheck=${false}
                 onInput=${(event) => setValue(event.currentTarget.value)}
                 onKeyDown=${(event) => event.key === "Enter" && go()}

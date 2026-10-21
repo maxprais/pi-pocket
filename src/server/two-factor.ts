@@ -15,6 +15,8 @@ export const RESEND_MS = 60 * 1000;
 export const MAX_SENDS_PER_HOUR = 5;
 /** The most unfinished challenges kept at once; the oldest end first. */
 const MAX_CHALLENGES = 200;
+/** Starts the id of a challenge that was never made, for an address with no account (`decoy`). */
+const DECOY = "x.";
 
 export interface Mailer {
     send(to: string, subject: string, text: string): Promise<void>;
@@ -35,6 +37,8 @@ interface Challenge {
     sentAt: number;
     /** Where to go after signing in: a path on this server. */
     next: string;
+    /** Started from an email typed on the homepage: the page then never says whether the address has an account. */
+    generic: boolean;
 }
 
 export type Verified =
@@ -127,7 +131,12 @@ export class TwoFactor {
     }
 
     /** Start a sign-in for `userId`: mail a code to `email` and return the challenge's id, for the browser's cookie. */
-    async begin(userId: string, email: string, next: string): Promise<string | undefined> {
+    async begin(
+        userId: string,
+        email: string,
+        next: string,
+        generic = false,
+    ): Promise<string | undefined> {
         if (!this.#roomToSend(email)) {
             return undefined;
         }
@@ -152,6 +161,7 @@ export class TwoFactor {
             attempts: 0,
             sentAt: 0,
             next,
+            generic,
         };
 
         this.#challenges.set(id, challenge);
@@ -167,8 +177,20 @@ export class TwoFactor {
         return id;
     }
 
+    /**
+     * A challenge for an address that has no account: nothing is sent and nothing is kept, and no code works. It looks
+     * like a real one to whoever typed the address, so the homepage never says which addresses have accounts.
+     */
+    decoy(email: string): string {
+        return `${DECOY}${Buffer.from(maskEmail(email)).toString("base64url")}`;
+    }
+
     /** Send a new code for a challenge, if it is live and the last one went at least `RESEND_MS` ago. */
     async resend(id: string): Promise<"sent" | "wait" | "gone"> {
+        if (id.startsWith(DECOY)) {
+            return "sent";
+        }
+
         const challenge = this.#live(id);
 
         if (challenge === undefined) {
@@ -187,6 +209,10 @@ export class TwoFactor {
 
     /** Check a typed code. A right one ends the challenge; too many wrong ones end it too. */
     verify(id: string, typed: string): Verified {
+        if (id.startsWith(DECOY)) {
+            return { ok: false, reason: "wrong", left: MAX_ATTEMPTS - 1 };
+        }
+
         const challenge = this.#live(id);
 
         if (challenge === undefined) {
@@ -221,9 +247,18 @@ export class TwoFactor {
 
     /** Where a live challenge's code went, masked; undefined when it ended. */
     where(id: string): string | undefined {
+        if (id.startsWith(DECOY)) {
+            return Buffer.from(id.slice(DECOY.length), "base64url").toString("utf8").slice(0, 254);
+        }
+
         const challenge = this.#live(id);
 
         return challenge === undefined ? undefined : maskEmail(challenge.email);
+    }
+
+    /** Whether the page for this challenge must keep quiet about whether the address has an account. */
+    generic(id: string): boolean {
+        return id.startsWith(DECOY) || this.#live(id)?.generic === true;
     }
 
     #live(id: string): Challenge | undefined {
