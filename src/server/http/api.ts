@@ -179,6 +179,7 @@ export function createApi(options: HttpOptions, auth: Auth) {
         }
 
         if (first === "logout" && method === "POST") {
+            auth.endSession(request);
             clearAuthCookie(response);
 
             return json(response, 200, { ok: true });

@@ -1,8 +1,11 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { ConfigStore, Role, User } from "./config.ts";
+import { type ConfigStore, type Role, SESSION_MS, type User } from "./config.ts";
+import type { TwoFactor } from "./two-factor.ts";
 
 export const COOKIE = "pocket_auth";
+/** The cookie that holds a half-finished sign-in (a code was sent, not yet typed). */
+export const PENDING_COOKIE = "pocket_2fa";
 
 /** How long an invite may last, in minutes: 15 minutes (the default, and always for an owner invite), an hour, a day, or a week. */
 export const INVITE_MINUTES = [15, 60, 24 * 60, 7 * 24 * 60] as const;
@@ -55,21 +58,38 @@ export function quickTunnelHost(request: IncomingMessage): string | undefined {
     return /^[a-z0-9-]+\.trycloudflare\.com$/.test(host) ? host : undefined;
 }
 
+function cookie(request: IncomingMessage, name: string, value: string, seconds: number): string {
+    return [
+        `${name}=${encodeURIComponent(value)}`,
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Lax",
+        `Max-Age=${seconds}`,
+        ...(isHttps(request) ? ["Secure"] : []),
+    ].join("; ");
+}
+
+/** Sign a browser in with `token`: the login token (a year), or a session's (as long as the session lasts). */
 export function setAuthCookie(
     request: IncomingMessage,
     response: ServerResponse,
     token: string,
+    seconds = 60 * 60 * 24 * 365,
 ): void {
-    const parts = [
-        `${COOKIE}=${encodeURIComponent(token)}`,
-        "Path=/",
-        "HttpOnly",
-        "SameSite=Lax",
-        `Max-Age=${60 * 60 * 24 * 365}`,
-        ...(isHttps(request) ? ["Secure"] : []),
-    ];
+    response.setHeader("set-cookie", cookie(request, COOKIE, token, seconds));
+}
 
-    response.setHeader("set-cookie", parts.join("; "));
+/** Keep a half-finished sign-in's id in the browser, for 10 minutes: as long as its code works. */
+export function setPendingCookie(
+    request: IncomingMessage,
+    response: ServerResponse,
+    id: string,
+): void {
+    response.setHeader("set-cookie", cookie(request, PENDING_COOKIE, id, 10 * 60));
+}
+
+export function clearPendingCookie(): string {
+    return `${PENDING_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
 export function clearAuthCookie(response: ServerResponse): void {
@@ -86,13 +106,24 @@ export type InviteGrant =
 /** Invites live in `config.json` (by their codes' hashes), so one that lasts a day or a week outlives a restart. */
 export class Auth {
     readonly #config: ConfigStore;
+    /** Set while email sign-in is on: only a session (made after an emailed code) then signs a device in. */
+    readonly twoFactor: TwoFactor | undefined;
 
-    constructor(config: ConfigStore) {
+    constructor(config: ConfigStore, twoFactor?: TwoFactor) {
         this.#config = config;
+        this.twoFactor = twoFactor;
     }
 
     user(request: IncomingMessage): User | undefined {
         const token = parseCookies(request.headers.cookie)[COOKIE];
+
+        // With email sign-in on, the login token never signs anything in by itself: a cookie or header that carries it
+        // is not a session, so the emailed code cannot be skipped by setting the cookie by hand.
+        if (this.twoFactor !== undefined) {
+            return token === undefined || token === ""
+                ? undefined
+                : this.#config.userBySession(token);
+        }
 
         if (token === undefined || token === "") {
             const bearer = String(request.headers.authorization ?? "");
@@ -107,8 +138,35 @@ export class Auth {
         return this.#config.userByToken(token);
     }
 
+    /** Who a login token belongs to: for `/login`, which is the one place the token is still taken. */
     tokenUser(token: string): User | undefined {
         return this.#config.userByToken(token);
+    }
+
+    /** After the emailed code: a session for the user, and the browser's cookie for it. */
+    startSession(request: IncomingMessage, response: ServerResponse, userId: string): void {
+        const token = this.#config.addSession(userId);
+
+        response.setHeader("set-cookie", [
+            cookie(request, COOKIE, token, SESSION_MS / 1000),
+            clearPendingCookie(),
+        ]);
+    }
+
+    /** Sign out: end the session this browser's cookie holds, so a copy of the cookie stops working too. */
+    endSession(request: IncomingMessage): void {
+        const token = parseCookies(request.headers.cookie)[COOKIE];
+
+        if (this.twoFactor !== undefined && token !== undefined && token !== "") {
+            this.#config.removeSession(token);
+        }
+    }
+
+    /** The half-finished sign-in a browser holds, if any. */
+    pending(request: IncomingMessage): string | undefined {
+        const id = parseCookies(request.headers.cookie)[PENDING_COOKIE];
+
+        return id === undefined || id === "" ? undefined : id;
     }
 
     /** A new invite that lasts `minutes`; an owner invite always lasts 15, the least. */

@@ -32,7 +32,20 @@ export interface User {
     tunnel?: string;
     /** The most Pi may spend for this person, in dollars; never for the owner. */
     budget?: number;
+    /** Where their sign-in codes go, while email sign-in is on (`two-factor.ts`). */
+    email?: string;
 }
+
+/** A device signed in with an emailed code: its cookie holds the token, kept here by its hash. */
+export interface StoredSession {
+    tokenHash: string;
+    userId: string;
+    createdAt: number;
+    expiresAt: number;
+}
+
+/** How long a device stays signed in after an emailed code: 30 days. */
+export const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** An invite not yet used, kept by its code's sha256 (the code itself is only shown to whoever made it). */
 export interface StoredInvite {
@@ -64,6 +77,8 @@ interface PocketConfig {
     users: User[];
     /** Invites not yet used: kept here so one that lasts a day or a week outlives a restart. */
     invites?: StoredInvite[];
+    /** Devices signed in with an emailed code. Used only while email sign-in is on. */
+    sessions?: StoredSession[];
     lastModel?: ModelChoice;
     /** The model and thinking level new sessions start with, as the owner chose; absent: the last one picked. */
     defaultModel?: ModelChoice;
@@ -305,7 +320,9 @@ export class ConfigStore {
 
     updateUser(
         id: string,
-        patch: Partial<Pick<User, "name" | "lastSeen" | "role" | "sessions" | "tunnel" | "budget">>,
+        patch: Partial<
+            Pick<User, "name" | "lastSeen" | "role" | "sessions" | "tunnel" | "budget" | "email">
+        >,
     ): void {
         const user = this.userById(id);
 
@@ -349,8 +366,47 @@ export class ConfigStore {
             this.#config.invites = this.#config.invites?.filter(
                 (invite) => invite.createdBy !== id,
             );
+            this.#config.sessions = this.#config.sessions?.filter(
+                (session) => session.userId !== id,
+            );
         }
 
+        this.save();
+    }
+
+    /** Sign a device in as `userId` after an emailed code: a new token for its cookie, which lasts `SESSION_MS`. */
+    addSession(userId: string): string {
+        const token = newToken();
+        const now = Date.now();
+
+        this.#config.sessions = [
+            ...(this.#config.sessions ?? []).filter((session) => session.expiresAt >= now),
+            { tokenHash: hashToken(token), userId, createdAt: now, expiresAt: now + SESSION_MS },
+        ];
+        this.save();
+
+        return token;
+    }
+
+    /** Whoever a live session token belongs to. */
+    userBySession(token: string): User | undefined {
+        const hash = hashToken(token);
+        const session = this.#config.sessions?.find((each) => sameHash(each.tokenHash, hash));
+
+        if (session === undefined || session.expiresAt < Date.now()) {
+            return undefined;
+        }
+
+        return this.userById(session.userId);
+    }
+
+    /** End one device's session, when it signs out. */
+    removeSession(token: string): void {
+        const hash = hashToken(token);
+
+        this.#config.sessions = this.#config.sessions?.filter(
+            (session) => !sameHash(session.tokenHash, hash),
+        );
         this.save();
     }
 
@@ -413,6 +469,9 @@ export class ConfigStore {
 
         if (owner !== undefined) {
             owner.tokenHash = hashToken(token);
+            this.#config.sessions = this.#config.sessions?.filter(
+                (session) => session.userId !== owner.id,
+            );
         }
 
         if (this.#config.invites !== undefined) {

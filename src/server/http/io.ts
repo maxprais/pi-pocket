@@ -2,6 +2,7 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync, readlinkSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ConversationId } from "@earendil-works/pi-durable";
+import type { TwoFactor } from "../two-factor.ts";
 import type { PocketApp } from "../app.ts";
 import type { User } from "../config.ts";
 import { HttpError } from "../errors.ts";
@@ -18,6 +19,8 @@ export interface HttpOptions {
     listen: { host: string; port: number };
     /** Restart the process (exit code 75 under the launcher). */
     restart(): void;
+    /** Email sign-in, for tests. Left out, it comes from the environment, and is off when that sets none. */
+    twoFactor?: TwoFactor;
 }
 
 /** A signed-in API request, as each group of routes gets it. */

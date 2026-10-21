@@ -112,6 +112,23 @@ The flake builds Pi Pocket (`nix run github:TannerMidd/pi-pocket`) and has a Nix
 
 Environment variables: `PI_POCKET_ACCESS`, `PI_POCKET_DIR`, `PI_POCKET_HOST`, `PI_POCKET_PORT`, `PI_POCKET_GUARD=off`, `PI_POCKET_BROWSER` (the browser to run, when Chromium or Chrome is not found by itself), and `PI_POCKET_BROWSER_ARGS` (extra flags for it, such as `--no-sandbox` where sandboxes are unavailable). Without a terminal (under systemd, for example), the launcher uses `--access` or the last choice.
 
+### Email sign-in
+
+For a server on the public internet, Pi Pocket can ask for a code sent to the person's email after their sign-in link. It is on only when all three are set, and an error when only some are:
+
+| Variable                | Purpose                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `PI_POCKET_SMTP_URL`    | Where mail goes through, such as `smtp://user:password@smtp.example.com:587` |
+| `PI_POCKET_MAIL_FROM`   | The sender, such as `Pi Pocket <pocket@example.com>`                         |
+| `PI_POCKET_OWNER_EMAIL` | Where the owner's codes go                                                   |
+
+Put them in a file that only the service reads (systemd's `EnvironmentFile=`), not in the unit. While it is on:
+
+- A sign-in link (or invite) takes a device to a page for a 6-digit code. The code works for 10 minutes and takes 5 tries; one address gets 5 codes an hour.
+- The code makes a session that lasts 30 days. The link's token itself signs nothing in, as a cookie or as a `Bearer` header, so the code cannot be skipped by setting the cookie by hand. Everyone signs in again when it is turned on.
+- A guest gives an email when they join; their codes go there. Whoever holds a link cannot choose where the code goes. Guests invited before it was turned on have no email: remove and invite them again.
+- Signing out ends the session on the server. Rotating the owner token ends the owner's sessions. Removing a person ends theirs.
+
 ## Architecture
 
 | Path                                                                                           | Role                                                                                                                                        |

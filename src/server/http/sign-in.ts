@@ -1,8 +1,10 @@
 /** The pages outside the app: signing in with a link, joining with an invite, and a share that arrived too early. */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PocketApp } from "../app.ts";
-import { type Auth, quickTunnelHost, setAuthCookie } from "../auth.ts";
+import { type Auth, quickTunnelHost, setAuthCookie, setPendingCookie } from "../auth.ts";
+import type { User } from "../config.ts";
 import { HttpError } from "../errors.ts";
+import { cleanEmail } from "../two-factor.ts";
 import { conversationId, escapeHtml, readBody, send } from "./io.ts";
 
 /** A form posted from another site, as browsers report it. Such a post must not sign this browser in or out. */
@@ -19,6 +21,166 @@ function localPath(next: string | null): string {
 
 function page(title: string, body: string): string {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>${escapeHtml(title)}</title><link rel="stylesheet" href="/style.css"></head><body class="plain-page"><main class="plain">${body}</main></body></html>`;
+}
+
+/**
+ * With email sign-in on: mail a code to the person and send the browser to the page that takes it. The person's email is
+ * the owner's from the environment, or the one a guest gave when they joined; never one typed by whoever holds a token.
+ */
+async function askForCode(
+    auth: Auth,
+    request: IncomingMessage,
+    response: ServerResponse,
+    user: User,
+    email: string | undefined,
+    next: string,
+): Promise<void> {
+    const twoFactor = auth.twoFactor;
+
+    if (twoFactor === undefined) {
+        throw new HttpError(500, "Email sign-in is off.");
+    }
+
+    if (email === undefined) {
+        return send(
+            response,
+            403,
+            page(
+                "Pi Pocket",
+                "<h1>No email on file</h1><p>This device cannot sign in until the owner removes you and invites you again. You will be asked for your email.</p>",
+            ),
+            "text/html; charset=utf-8",
+        );
+    }
+
+    let id: string | undefined;
+
+    try {
+        id = await twoFactor.begin(user.id, email, next);
+    } catch (error) {
+        console.error(`Pi Pocket could not send a sign-in code: ${(error as Error).message}`);
+
+        return send(
+            response,
+            502,
+            page(
+                "Pi Pocket",
+                "<h1>Could not send the code</h1><p>The email did not go. Try again in a minute, or ask the owner to check the server's mail settings.</p>",
+            ),
+            "text/html; charset=utf-8",
+        );
+    }
+
+    if (id === undefined) {
+        return send(
+            response,
+            429,
+            page("Pi Pocket", "<h1>Too many codes</h1><p>Wait an hour, then try again.</p>"),
+            "text/html; charset=utf-8",
+        );
+    }
+
+    setPendingCookie(request, response, id);
+    response.writeHead(303, { location: "/login/verify" });
+    response.end();
+}
+
+function codePage(where: string, notice = ""): string {
+    return page(
+        "Enter your code · Pi Pocket",
+        `<h1>Check your email</h1><p>A 6-digit code went to ${escapeHtml(where)}. It works for 10 minutes.</p>${notice}<form method="post" action="/login/verify"><input type="hidden" name="action" value="verify"><label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="8" autofocus required></label><button type="submit">Sign in</button></form><form method="post" action="/login/verify"><input type="hidden" name="action" value="resend"><button type="submit">Send a new code</button></form>`,
+    );
+}
+
+/** `/login/verify`: the page that takes the emailed code, and signs the browser in when it is right. */
+export async function verify(
+    auth: Auth,
+    request: IncomingMessage,
+    response: ServerResponse,
+): Promise<void> {
+    const twoFactor = auth.twoFactor;
+    const id = auth.pending(request);
+    const where = twoFactor === undefined || id === undefined ? undefined : twoFactor.where(id);
+
+    if (twoFactor === undefined || id === undefined || where === undefined) {
+        return send(
+            response,
+            410,
+            page(
+                "Pi Pocket",
+                `<h1>Code expired</h1><p>Open your sign-in link again to get a new code.</p>`,
+            ),
+            "text/html; charset=utf-8",
+        );
+    }
+
+    if (request.method !== "POST") {
+        return send(response, 200, codePage(where), "text/html; charset=utf-8", {
+            "referrer-policy": "no-referrer",
+        });
+    }
+
+    if (crossSite(request)) {
+        throw new HttpError(403, "Sign in from Pi Pocket's own page.");
+    }
+
+    const form = new URLSearchParams((await readBody(request, 10_000)).toString("utf8"));
+
+    if (form.get("action") === "resend") {
+        let result: "sent" | "wait" | "gone";
+
+        try {
+            result = await twoFactor.resend(id);
+        } catch (error) {
+            console.error(`Pi Pocket could not send a sign-in code: ${(error as Error).message}`);
+
+            return send(
+                response,
+                502,
+                codePage(where, "<p>The email did not go. Try again in a minute.</p>"),
+                "text/html; charset=utf-8",
+            );
+        }
+
+        const notice =
+            result === "sent"
+                ? "<p>A new code is on its way.</p>"
+                : "<p>Wait a minute before asking for another code.</p>";
+
+        return send(
+            response,
+            result === "gone" ? 410 : 200,
+            codePage(where, notice),
+            "text/html; charset=utf-8",
+        );
+    }
+
+    const result = twoFactor.verify(id, form.get("code") ?? "");
+
+    if (!result.ok) {
+        const notice =
+            result.reason === "wrong"
+                ? `<p>That code is not right. ${result.left} ${result.left === 1 ? "try" : "tries"} left.</p>`
+                : "";
+
+        if (result.reason !== "wrong") {
+            return send(
+                response,
+                410,
+                page(
+                    "Pi Pocket",
+                    "<h1>Code expired</h1><p>Open your sign-in link again to get a new code.</p>",
+                ),
+                "text/html; charset=utf-8",
+            );
+        }
+
+        return send(response, 401, codePage(where, notice), "text/html; charset=utf-8");
+    }
+
+    auth.startSession(request, response, result.userId);
+    response.writeHead(303, { location: localPath(result.next) });
+    response.end();
 }
 
 /** `/login`: sign this browser in with a token from a link, after asking when it would switch accounts. */
@@ -69,6 +231,12 @@ export async function login(
         );
     }
 
+    if (auth.twoFactor !== undefined) {
+        const email = signingIn.role === "owner" ? auth.twoFactor.ownerEmail : signingIn.email;
+
+        return askForCode(auth, request, response, signingIn, email, next);
+    }
+
     setAuthCookie(request, response, token);
     response.writeHead(303, { location: next });
     response.end();
@@ -90,6 +258,22 @@ export async function join(
         }
 
         const form = new URLSearchParams((await readBody(request, 10_000)).toString("utf8"));
+        const grant = auth.invite(code);
+        const email = cleanEmail(form.get("email") ?? "");
+
+        // A guest's email has to be known before the invite is spent, or a typo would use it up.
+        if (auth.twoFactor !== undefined && grant?.role !== "owner" && email === undefined) {
+            return send(
+                response,
+                400,
+                page(
+                    "Join Pi Pocket",
+                    "<h1>Email needed</h1><p>Go back and enter an email address. Pi Pocket sends a sign-in code there.</p>",
+                ),
+                "text/html; charset=utf-8",
+            );
+        }
+
         const redeemed = auth.redeem(code, form.get("name") ?? "");
 
         if (redeemed === undefined) {
@@ -106,6 +290,21 @@ export async function join(
         // The owner is never tied to one tunnel.
         if (tunnel !== undefined && redeemed.user.role !== "owner") {
             app.config.updateUser(redeemed.user.id, { tunnel });
+        }
+
+        if (auth.twoFactor !== undefined) {
+            if (redeemed.user.role !== "owner" && email !== undefined) {
+                app.config.updateUser(redeemed.user.id, { email });
+            }
+
+            return askForCode(
+                auth,
+                request,
+                response,
+                redeemed.user,
+                redeemed.user.role === "owner" ? auth.twoFactor.ownerEmail : email,
+                "/",
+            );
         }
 
         setAuthCookie(request, response, redeemed.token);
@@ -153,6 +352,10 @@ export async function join(
         grant.session === undefined
             ? "every session on this server"
             : `the session “${escapeHtml(await app.conversationTitle(conversationId(grant.session)))}”`;
+    const emailField =
+        auth.twoFactor === undefined
+            ? ""
+            : `<label>Your email<input name="email" type="email" maxlength="254" required placeholder="you@example.com" autocomplete="email"></label><p class="muted">Pi Pocket sends a sign-in code here.</p>`;
     const can =
         grant.role === "viewer"
             ? `read ${where} and chat with the people there, but not steer Pi`
@@ -163,7 +366,7 @@ export async function join(
         200,
         page(
             "Join Pi Pocket",
-            `<h1>Join Pi Pocket</h1><p>This device will be able to ${can}.</p><form method="post"><label>Your name<input name="name" maxlength="40" autofocus required placeholder="e.g. Alex"></label><button type="submit">Join</button></form>`,
+            `<h1>Join Pi Pocket</h1><p>This device will be able to ${can}.</p><form method="post"><label>Your name<input name="name" maxlength="40" autofocus required placeholder="e.g. Alex"></label>${emailField}<button type="submit">Join</button></form>`,
         ),
         "text/html; charset=utf-8",
     );

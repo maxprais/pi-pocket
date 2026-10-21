@@ -13,12 +13,20 @@ import { extensionFile } from "./http/extension-routes.ts";
 import { hookRoute } from "./http/hook-routes.ts";
 import { serveApp, serveFile, VENDOR, WEB } from "./http/assets.ts";
 import { type HttpOptions, json } from "./http/io.ts";
-import { join as joinPage, login, sharePage } from "./http/sign-in.ts";
+import { join as joinPage, login, sharePage, verify } from "./http/sign-in.ts";
 import { themeFile } from "./http/theme-routes.ts";
+import { settingsFrom, smtpMailer, TwoFactor } from "./two-factor.ts";
+
+/** Email sign-in as the environment sets it: off when it sets none, an error when it sets only some. */
+function twoFactorFromEnv(): TwoFactor | undefined {
+    const settings = settingsFrom(process.env);
+
+    return settings === undefined ? undefined : new TwoFactor(settings, smtpMailer(settings));
+}
 
 export function createHandler(options: HttpOptions) {
     const { app } = options;
-    const auth = new Auth(app.config);
+    const auth = new Auth(app.config, options.twoFactor ?? twoFactorFromEnv());
     const api = createApi(options, auth);
 
     return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
@@ -73,6 +81,10 @@ export function createHandler(options: HttpOptions) {
                     VENDOR[parts[1]]!,
                     "text/javascript; charset=utf-8",
                 );
+            }
+
+            if (parts[0] === "login" && parts[1] === "verify") {
+                return await verify(auth, request, response);
             }
 
             if (parts[0] === "login" && (request.method === "GET" || request.method === "POST")) {
