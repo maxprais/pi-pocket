@@ -183,11 +183,18 @@ Checked: the service is `active` with no start error, and the login token sent a
 
 Pushed as `aab99f6` and deployed (`git pull --ff-only`, `systemctl restart pi-pocket`). The homepage takes an email address as well as a link, token, or invite code: an account that uses it gets a code, and the code signs in with no link. The owner's address is `PI_POCKET_OWNER_EMAIL`; a guest's is the one they gave when they joined. An address with no account gets the same page and a similar delay, so the page never says which addresses have accounts. Checked on the server: `/login/email` answers, a bad address gets `400`, and `signin.js` carries the form. Because the owner can now sign in with only an email code, the owner's email account is the key: turn on 2-step verification for it.
 
+### 12. Hardening: SSH check, Cloud Firewall, reboot
+
+- **SSH settings** (checked with `sshd -T`, nothing changed): password and keyboard-interactive login are off, so root needs a key; root login is `yes`, which with passwords off means key only; one authorized key (`pi-pocket`); the only other login user is `pocket`, and the `sudo` group is empty, so Pi and its agents cannot use `sudo`; `unattended-upgrades` is on; `fail2ban` is not installed (optional, it would only cut log noise with key-only SSH).
+- **DigitalOcean Cloud Firewall** `pi-pocket-web`, applied to the `agent` Droplet: inbound SSH 22, HTTP 80, and HTTPS 443 from anywhere; outbound as DigitalOcean's defaults (ICMP, all TCP, all UDP). It sits in front of `ufw` as a second layer. Checked from outside: SSH works, HTTPS answers `200`, HTTP answers `308`, and ports 8787, 3000, 25, and 5432 are closed.
+- **Reboot:** `/var/run/reboot-required` did not exist, so no update needed it, but one was done to prove that Pi Pocket and Caddy start on their own.
+
 ## Still to do
 
 1. Try a guest invite end to end, to check a guest's code goes to the email they typed.
-2. Optional: a DigitalOcean Cloud Firewall as a second layer in front of `ufw`.
-3. Optional: reboot the server once, for the Ubuntu updates that wait for a restart.
+2. Turn on 2-step verification for the owner's email account: the owner can sign in with only an email code.
+3. Optional: Lancet Guard (Menu → Extensions), so risky commands wait for approval.
+4. Optional: let the owner type the guest's email when making an invite, so an intercepted invite link cannot be used by someone else.
 
 ## Operating it
 
