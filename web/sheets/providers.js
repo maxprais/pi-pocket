@@ -250,7 +250,7 @@ export function ProvidersSheet() {
         className=${`providers-sheet ${owner ? "with-side" : ""}`}
     >
         <p class="muted small">
-            Pi Pocket shares Pi's sign-ins (<span class="mono">~/.pi/agent/auth.json</span>). ${owner ? "" : "Only the owner can change them."}
+            Max's Agent shares Pi's sign-ins (<span class="mono">~/.pi/agent/auth.json</span>). ${owner ? "" : "Only the owner can change them."}
         </p>
         <div class="providers-layout">
             ${

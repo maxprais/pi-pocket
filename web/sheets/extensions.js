@@ -25,7 +25,7 @@ function guardNote(module, guard) {
     if (!module.enabled) {
         return {
             warn: true,
-            text: "Off in Pi Pocket: bash, write, and edit calls run unchecked here. Pi itself still uses it.",
+            text: "Off in Max's Agent: bash, write, and edit calls run unchecked here. Pi itself still uses it.",
         };
     }
 

@@ -46,7 +46,7 @@ async function askForCode(
             response,
             403,
             page(
-                "Pi Pocket",
+                "Max's Agent",
                 "<h1>No email on file</h1><p>This device cannot sign in until the owner removes you and invites you again. You will be asked for your email.</p>",
             ),
             "text/html; charset=utf-8",
@@ -64,7 +64,7 @@ async function askForCode(
             response,
             502,
             page(
-                "Pi Pocket",
+                "Max's Agent",
                 "<h1>Could not send the code</h1><p>The email did not go. Try again in a minute, or ask the owner to check the server's mail settings.</p>",
             ),
             "text/html; charset=utf-8",
@@ -75,7 +75,7 @@ async function askForCode(
         return send(
             response,
             429,
-            page("Pi Pocket", "<h1>Too many codes</h1><p>Wait an hour, then try again.</p>"),
+            page("Max's Agent", "<h1>Too many codes</h1><p>Wait an hour, then try again.</p>"),
             "text/html; charset=utf-8",
         );
     }
@@ -91,7 +91,7 @@ function codePage(where: string, notice = "", generic = false): string {
         : `A 6-digit code went to ${escapeHtml(where)}. It works for 10 minutes.`;
 
     return page(
-        "Enter your code · Pi Pocket",
+        "Enter your code · Max's Agent",
         `<h1>Check your email</h1><p>${says}</p>${notice}<form method="post" action="/login/verify"><input type="hidden" name="action" value="verify"><label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="8" autofocus required></label><button type="submit">Sign in</button></form><form method="post" action="/login/verify"><input type="hidden" name="action" value="resend"><button type="submit">Send a new code</button></form>`,
     );
 }
@@ -130,7 +130,7 @@ export async function emailLogin(
     }
 
     if (crossSite(request)) {
-        throw new HttpError(403, "Sign in from Pi Pocket's own page.");
+        throw new HttpError(403, "Sign in from Max's Agent's own page.");
     }
 
     const twoFactor = auth.twoFactor;
@@ -140,8 +140,8 @@ export async function emailLogin(
             response,
             404,
             page(
-                "Pi Pocket",
-                "<h1>Email sign-in is off</h1><p>Use the sign-in link Pi Pocket printed, or an invite.</p>",
+                "Max's Agent",
+                "<h1>Email sign-in is off</h1><p>Use the sign-in link Max's Agent printed, or an invite.</p>",
             ),
             "text/html; charset=utf-8",
         );
@@ -157,7 +157,7 @@ export async function emailLogin(
         return send(
             response,
             429,
-            page("Pi Pocket", "<h1>Too many tries</h1><p>Wait ten minutes, then try again.</p>"),
+            page("Max's Agent", "<h1>Too many tries</h1><p>Wait ten minutes, then try again.</p>"),
             "text/html; charset=utf-8",
         );
     }
@@ -169,7 +169,7 @@ export async function emailLogin(
         return send(
             response,
             400,
-            page("Pi Pocket", "<h1>Not an email address</h1><p>Go back and check it.</p>"),
+            page("Max's Agent", "<h1>Not an email address</h1><p>Go back and check it.</p>"),
             "text/html; charset=utf-8",
         );
     }
@@ -209,7 +209,7 @@ export async function verify(
             response,
             410,
             page(
-                "Pi Pocket",
+                "Max's Agent",
                 `<h1>Code expired</h1><p>Open your sign-in link again to get a new code.</p>`,
             ),
             "text/html; charset=utf-8",
@@ -223,7 +223,7 @@ export async function verify(
     }
 
     if (crossSite(request)) {
-        throw new HttpError(403, "Sign in from Pi Pocket's own page.");
+        throw new HttpError(403, "Sign in from Max's Agent's own page.");
     }
 
     const form = new URLSearchParams((await readBody(request, 10_000)).toString("utf8"));
@@ -270,7 +270,7 @@ export async function verify(
                 response,
                 410,
                 page(
-                    "Pi Pocket",
+                    "Max's Agent",
                     "<h1>Code expired</h1><p>Open your sign-in link again to get a new code.</p>",
                 ),
                 "text/html; charset=utf-8",
@@ -295,7 +295,7 @@ export async function login(
     const posted = request.method === "POST";
 
     if (posted && crossSite(request)) {
-        throw new HttpError(403, "Sign in from Pi Pocket's own page.");
+        throw new HttpError(403, "Sign in from Max's Agent's own page.");
     }
 
     const form = posted
@@ -310,8 +310,8 @@ export async function login(
             response,
             401,
             page(
-                "Pi Pocket",
-                `<h1>Link expired</h1><p>That login link is not valid. Use the link Pi Pocket prints when it starts, or ask someone signed in for a new invite.</p>`,
+                "Max's Agent",
+                `<h1>Link expired</h1><p>That login link is not valid. Use the link Max's Agent prints when it starts, or ask someone signed in for a new invite.</p>`,
             ),
             "text/html; charset=utf-8",
         );
@@ -325,7 +325,7 @@ export async function login(
             response,
             200,
             page(
-                "Switch account? · Pi Pocket",
+                "Switch account? · Max's Agent",
                 `<h1>Switch account?</h1><p>This browser is signed in as ${escapeHtml(current.name)}. The link you opened signs it in as ${escapeHtml(signingIn.name)} instead.</p><form method="post" action="/login"><input type="hidden" name="token" value="${escapeHtml(token)}"><input type="hidden" name="next" value="${escapeHtml(next)}"><button type="submit">Sign in as ${escapeHtml(signingIn.name)}</button></form><p><a href="/">Stay signed in as ${escapeHtml(current.name)}</a></p>`,
             ),
             "text/html; charset=utf-8",
@@ -356,7 +356,7 @@ export async function join(
 ): Promise<void> {
     if (request.method === "POST") {
         if (crossSite(request)) {
-            throw new HttpError(403, "Join from Pi Pocket's own page.");
+            throw new HttpError(403, "Join from Max's Agent's own page.");
         }
 
         const form = new URLSearchParams((await readBody(request, 10_000)).toString("utf8"));
@@ -369,8 +369,8 @@ export async function join(
                 response,
                 400,
                 page(
-                    "Join Pi Pocket",
-                    "<h1>Email needed</h1><p>Go back and enter an email address. Pi Pocket sends a sign-in code there.</p>",
+                    "Join Max's Agent",
+                    "<h1>Email needed</h1><p>Go back and enter an email address. Max's Agent sends a sign-in code there.</p>",
                 ),
                 "text/html; charset=utf-8",
             );
@@ -385,7 +385,7 @@ export async function join(
                 response,
                 400,
                 page(
-                    "Join Pi Pocket",
+                    "Join Max's Agent",
                     "<h1>Email already in use</h1><p>Go back and use a different email address.</p>",
                 ),
                 "text/html; charset=utf-8",
@@ -398,7 +398,7 @@ export async function join(
             return send(
                 response,
                 410,
-                page("Pi Pocket", "<h1>Invite expired</h1><p>Ask for a new one.</p>"),
+                page("Max's Agent", "<h1>Invite expired</h1><p>Ask for a new one.</p>"),
                 "text/html; charset=utf-8",
             );
         }
@@ -439,7 +439,7 @@ export async function join(
             response,
             410,
             page(
-                "Pi Pocket",
+                "Max's Agent",
                 "<h1>Invite expired</h1><p>Each invite works once, and only until it expires. Ask for a new one.</p>",
             ),
             "text/html; charset=utf-8",
@@ -458,8 +458,8 @@ export async function join(
             response,
             200,
             page(
-                "Sign in as owner · Pi Pocket",
-                `<h1>Sign in as owner</h1><p>This device will sign in as you, the owner. It gets full control of Pi Pocket and of this machine.</p>${switching}<form method="post"><button type="submit">Sign in as owner</button></form>`,
+                "Sign in as owner · Max's Agent",
+                `<h1>Sign in as owner</h1><p>This device will sign in as you, the owner. It gets full control of Max's Agent and of this machine.</p>${switching}<form method="post"><button type="submit">Sign in as owner</button></form>`,
             ),
             "text/html; charset=utf-8",
             { "referrer-policy": "no-referrer" },
@@ -473,7 +473,7 @@ export async function join(
     const emailField =
         auth.twoFactor === undefined
             ? ""
-            : `<label>Your email<input name="email" type="email" maxlength="254" required placeholder="you@example.com" autocomplete="email"></label><p class="muted">Pi Pocket sends a sign-in code here.</p>`;
+            : `<label>Your email<input name="email" type="email" maxlength="254" required placeholder="you@example.com" autocomplete="email"></label><p class="muted">Max's Agent sends a sign-in code here.</p>`;
     const can =
         grant.role === "viewer"
             ? `read ${where} and chat with the people there, but not steer Pi`
@@ -483,8 +483,8 @@ export async function join(
         response,
         200,
         page(
-            "Join Pi Pocket",
-            `<h1>Join Pi Pocket</h1><p>This device will be able to ${can}.</p><form method="post"><label>Your name<input name="name" maxlength="40" autofocus required placeholder="e.g. Alex"></label>${emailField}<button type="submit">Join</button></form>`,
+            "Join Max's Agent",
+            `<h1>Join Max's Agent</h1><p>This device will be able to ${can}.</p><form method="post"><label>Your name<input name="name" maxlength="40" autofocus required placeholder="e.g. Alex"></label>${emailField}<button type="submit">Join</button></form>`,
         ),
         "text/html; charset=utf-8",
     );
@@ -497,7 +497,7 @@ export function sharePage(response: ServerResponse): void {
         200,
         page(
             "Share to Pi",
-            `<h1>Open Pi Pocket first</h1><p>Sharing works once Pi Pocket has been opened on this device over https. Open it, then share again.</p><p><a href="/">Open Pi Pocket</a></p>`,
+            `<h1>Open Max's Agent first</h1><p>Sharing works once Max's Agent has been opened on this device over https. Open it, then share again.</p><p><a href="/">Open Max's Agent</a></p>`,
         ),
         "text/html; charset=utf-8",
     );

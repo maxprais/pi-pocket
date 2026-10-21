@@ -302,8 +302,8 @@ export class TwoFactor {
 
         await this.#mailer.send(
             challenge.email,
-            "Your Pi Pocket sign-in code",
-            `Your Pi Pocket sign-in code is ${code}.\n\nIt works for 10 minutes. If you did not try to sign in, ignore this email: nobody can sign in without it.\n`,
+            "Your Max's Agent sign-in code",
+            `Your Max's Agent sign-in code is ${code}.\n\nIt works for 10 minutes. If you did not try to sign in, ignore this email: nobody can sign in without it.\n`,
         );
 
         // Only after the mail went: a send that failed uses up no attempt, and no code that never arrived can be typed.

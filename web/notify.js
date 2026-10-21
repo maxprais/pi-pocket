@@ -80,11 +80,11 @@ function sameKey(subscription, publicKey) {
 /** Why this device cannot get notifications, or null when it can. */
 function blocker() {
     if (!isSecureContext) {
-        return "Notifications need a secure (https) address. Open Pi Pocket through the Cloudflare Tunnel, or through tailscale serve, on this device.";
+        return "Notifications need a secure (https) address. Open Max's Agent through the Cloudflare Tunnel, or through tailscale serve, on this device.";
     }
 
     if (!supported) {
-        return "This browser cannot receive notifications. On iPhone and iPad, add Pi Pocket to the home screen first, then open it from there.";
+        return "This browser cannot receive notifications. On iPhone and iPad, add Max's Agent to the home screen first, then open it from there.";
     }
 
     if (Notification.permission === "denied") {

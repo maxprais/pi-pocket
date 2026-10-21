@@ -53,10 +53,7 @@ export function SignIn() {
 
     return html`<div class="signin" data-part="sign-in">
         <div class="pi big">π</div>
-        <h1>Pi Pocket</h1>
-        <p class="muted">
-            Enter your email and Pi Pocket sends you a code. You can also open the sign-in link Pi Pocket printed, or an invite, and paste the link, the token, or an invite code here.
-        </p>
+        <h1>Max's Agent</h1>
         <div class="row">
             <input
                 value=${value}

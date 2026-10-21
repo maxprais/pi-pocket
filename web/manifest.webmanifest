@@ -1,6 +1,6 @@
 {
-    "name": "Pi Pocket",
-    "short_name": "Pi Pocket",
+    "name": "Max's Agent",
+    "short_name": "Max's Agent",
     "description": "Durable, multiplayer Pi agents in your browser",
     "start_url": "/",
     "scope": "/",

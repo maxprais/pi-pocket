@@ -56,7 +56,7 @@ function ThemeCard({ id, desktop = false }) {
         class=${`theme-card ${on ? "on" : ""} ${desktop ? "theme-desktop" : ""}`}
         aria-pressed=${on}
         style=${vars}
-        title=${desktop ? "Follow the Omarchy theme of the machine Pi Pocket runs on" : palette.name}
+        title=${desktop ? "Follow the Omarchy theme of the machine Max's Agent runs on" : palette.name}
         onMouseEnter=${() => matchMedia("(hover: hover)").matches && preview(id)}
         onMouseLeave=${() => preview(null)}
         onFocus=${() => preview(id)}
@@ -69,7 +69,7 @@ function ThemeCard({ id, desktop = false }) {
                 ? html`<div class="tc-text">
                     ${name}
                     <div class="tc-note">
-                        Follows your desktop: change the Omarchy theme and Pi Pocket changes with it.
+                        Follows your desktop: change the Omarchy theme and Max's Agent changes with it.
                     </div>
                     <div class="tc-dots">
                         ${dots.map((dot) => html`<i style=${`background:var(${dot})`}></i>`)}
@@ -455,7 +455,7 @@ export function AppearanceSheet() {
         ${
             !desktop &&
             html`<p class="muted small">
-                Running Pi Pocket on an Omarchy desktop adds “Desktop”: the app follows the theme the desktop uses.
+                Running Max's Agent on an Omarchy desktop adds “Desktop”: the app follows the theme the desktop uses.
             </p>`
         }
         <div class="label">Layout and motion</div>

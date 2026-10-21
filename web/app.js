@@ -465,8 +465,8 @@ function App() {
 
     useEffect(() => {
         document.title = state.view.conversation?.title
-            ? `${state.view.conversation.title} · Pi Pocket`
-            : "Pi Pocket";
+            ? `${state.view.conversation.title} · Max's Agent`
+            : "Max's Agent";
     }, [state.view.conversation?.title]);
 
     if (state.me === undefined) {

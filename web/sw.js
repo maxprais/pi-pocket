@@ -13,7 +13,7 @@ self.addEventListener("push", (event) => {
     try {
         data = event.data?.json() ?? {};
     } catch {
-        data = { title: "Pi Pocket", body: event.data?.text() ?? "" };
+        data = { title: "Max's Agent", body: event.data?.text() ?? "" };
     }
 
     const approval = data.approval;
@@ -27,7 +27,7 @@ self.addEventListener("push", (event) => {
 
     event.waitUntil(
         Promise.all([
-            self.registration.showNotification(data.title || "Pi Pocket", {
+            self.registration.showNotification(data.title || "Max's Agent", {
                 body: data.body || "",
                 tag: data.tag,
                 renotify: Boolean(data.tag),
@@ -59,7 +59,7 @@ async function answerApproval(approval, allow, data) {
                 `The server answered ${response.status}.`;
         }
     } catch {
-        problem = "Pi Pocket could not be reached.";
+        problem = "Max's Agent could not be reached.";
     }
 
     if (problem === undefined) {

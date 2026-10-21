@@ -230,7 +230,7 @@ export function PiSessionSheet({ path }) {
         ${
             info.model &&
             !info.modelHere &&
-            html`<p class="muted small">It continues with Pi Pocket's usual model.</p>`
+            html`<p class="muted small">It continues with Max's Agent's usual model.</p>`
         }
         ${
             info.pocket &&
@@ -257,7 +257,7 @@ export function PiSessionSheet({ path }) {
                 ${info.pocket ? "Continue it here again" : "Continue in Pocket"}
             </button>
             <p class="muted small">
-                Pi gets the conversation as Pi left it, with Pi Pocket's instructions and tools. Nothing Pi did runs again, and the session's file stays as it is.
+                Pi gets the conversation as Pi left it, with Max's Agent's instructions and tools. Nothing Pi did runs again, and the session's file stays as it is.
             </p>
         </div>
     <//>`;
