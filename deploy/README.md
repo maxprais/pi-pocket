@@ -2,7 +2,7 @@
 
 A log of how this deployment was made, step by step, so it can be repeated. Each step says what it does and why. This file is updated as the deployment goes on.
 
-**Status:** live at `https://agent.maxprais.com` (HTTPS from Let's Encrypt, through Caddy), owner token rotated. Email sign-in is not built yet, so the owner link is the only protection: keep it private.
+**Status:** live at `https://agent.maxprais.com` (HTTPS from Let's Encrypt, through Caddy), owner token rotated, email sign-in on (codes sent through Resend from `mail.maxprais.com`).
 
 ## Choices made
 
@@ -151,7 +151,7 @@ ssh root@46.101.32.29 'node -p "\"https://agent.maxprais.com/login?token=\"+requ
 
 Pi Pocket prints the sign-in link in its log at each start, so the current token is also in `journalctl -u pi-pocket` for anyone with root on the server.
 
-### 9. Email sign-in (written, not deployed yet)
+### 9. Email sign-in (deployed)
 
 Built in the fork: a sign-in link must be followed by a 6-digit code sent to the person's email. See "Email sign-in" in the main `README.md` for how it behaves. It is off until three variables are set on the server.
 
@@ -169,12 +169,21 @@ Put the three variables in `/etc/pi-pocket.env`, then add `EnvironmentFile=/etc/
 su - pocket -c "cd pi-pocket && git pull && npm ci" && systemctl restart pi-pocket
 ```
 
+### 10. Mail through Resend, and the deploy
+
+- Resend sends from the subdomain `mail.maxprais.com`, not the root domain, which already has Microsoft 365 mail and its own SPF record. Resend's DKIM, SPF, and return-path records were added at GoDaddy and checked with `dig` against `8.8.8.8`.
+- DigitalOcean blocks outbound SMTP on ports 25, 465, and 587 (checked from the server with `bash -c "</dev/tcp/smtp.resend.com/PORT"`: only 2465 and 2587 were open), so the address uses Resend's port `2465`: `smtps://resend:KEY@smtp.resend.com:2465`. With 465 the sign-in page loaded forever.
+- The SMTP settings are in `/etc/pi-pocket.env` (mode 600, owned by root), which the unit loads with `EnvironmentFile=`. The API key was typed on the server by the owner, so it never appeared in a chat or in the repo.
+- Pushed to the fork's `main` (`3b7babc`), then on the server: `git pull --ff-only`, `npm ci`, `systemctl restart pi-pocket`.
+
+Checked: the service is `active` with no start error, and the login token sent as a `Bearer` header now answers `401`, so email sign-in is on.
+
 ## Still to do
 
-1. Choose an SMTP provider and make credentials for it (Resend, Postmark, SES, or similar), with the sending domain's DNS records (SPF and DKIM) set at GoDaddy.
-2. Commit and push the email sign-in to the fork, then turn it on as in step 9.
-3. Check it end to end from a browser, and keep an SSH session open while doing so: if the mail settings are wrong, sign-in fails closed, and the way back is to remove the three variables and restart.
-4. Optional: a DigitalOcean Cloud Firewall as a second layer in front of `ufw`.
+1. Sign in from a browser with the owner link and the emailed code, and check the email arrives (look in spam the first time).
+2. Try a guest invite end to end, to check a guest's code goes to the email they typed.
+3. Optional: a DigitalOcean Cloud Firewall as a second layer in front of `ufw`.
+4. Optional: reboot the server once, for the Ubuntu updates that wait for a restart.
 
 ## Operating it
 

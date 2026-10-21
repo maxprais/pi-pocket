@@ -116,11 +116,11 @@ Environment variables: `PI_POCKET_ACCESS`, `PI_POCKET_DIR`, `PI_POCKET_HOST`, `P
 
 For a server on the public internet, Pi Pocket can ask for a code sent to the person's email after their sign-in link. It is on only when all three are set, and an error when only some are:
 
-| Variable                | Purpose                                                                      |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `PI_POCKET_SMTP_URL`    | Where mail goes through, such as `smtp://user:password@smtp.example.com:587` |
-| `PI_POCKET_MAIL_FROM`   | The sender, such as `Pi Pocket <pocket@example.com>`                         |
-| `PI_POCKET_OWNER_EMAIL` | Where the owner's codes go                                                   |
+| Variable                | Purpose                                                                                                                                                                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PI_POCKET_SMTP_URL`    | Where mail goes through, such as `smtps://user:password@smtp.example.com:465`. Some hosts (DigitalOcean, for one) block outbound ports 25, 465, and 587: use the provider's alternative port, such as Resend's `2465` |
+| `PI_POCKET_MAIL_FROM`   | The sender, such as `Pi Pocket <pocket@example.com>`                                                                                                                                                                  |
+| `PI_POCKET_OWNER_EMAIL` | Where the owner's codes go                                                                                                                                                                                            |
 
 Put them in a file that only the service reads (systemd's `EnvironmentFile=`), not in the unit. While it is on:
 

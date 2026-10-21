@@ -99,7 +99,15 @@ export function smtpMailer(settings: TwoFactorSettings): Mailer {
 
     return {
         async send(to, subject, text) {
-            transport ??= import("nodemailer").then((mod) => mod.createTransport(settings.smtpUrl));
+            // Timeouts, so a mail port the host blocks ends in an error page within seconds, not a page that never loads.
+            transport ??= import("nodemailer").then((mod) =>
+                mod.createTransport({
+                    url: settings.smtpUrl,
+                    connectionTimeout: 10_000,
+                    greetingTimeout: 10_000,
+                    socketTimeout: 20_000,
+                }),
+            );
             await (await transport).sendMail({ from: settings.from, to, subject, text });
         },
     };
