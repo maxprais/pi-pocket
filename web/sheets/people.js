@@ -306,7 +306,7 @@ function lastSeen(person) {
 }
 
 /** Everyone with access: who is online, when the others were last here, and (for the owner) what each may do. */
-function PeopleList() {
+function PeopleList({ onToken }) {
     const { me, users, sessions } = store.state;
     const owner = me?.role === "owner";
     const sessionTitle = (id) => sessions.find((each) => each.id === id)?.title ?? `session ${id}`;
@@ -336,7 +336,7 @@ function PeopleList() {
                         ${person.id === me?.id ? html` <span class="muted small">(you)</span>` : ""}
                     </div>
                     <div class="muted small">
-                        ${person.role === "owner" ? "owner" : person.role === "viewer" ? "view only" : "can steer"}
+                        ${person.role === "owner" ? "owner" : person.service ? "service · API token only" : person.role === "viewer" ? "view only" : "can steer"}
                         ${person.sessions ? ` · only ${person.sessions.map(sessionTitle).join(", ")}` : ""} · ${lastSeen(person)}
                     </div>
                 </div>
@@ -345,7 +345,25 @@ function PeopleList() {
                     person.role !== "owner" &&
                     html`<div class="person-actions">
                         ${
+                            person.service &&
+                            onToken &&
+                            html`<button
+                                class="button small"
+                                title="Replace its API token: the old one stops working"
+                                onClick=${() =>
+                                    confirm(
+                                        `Replace ${person.name}'s token? The old one stops working.`,
+                                    ) &&
+                                    attempt(async () =>
+                                        onToken(await api(`service-guest/${person.id}/token`, {})),
+                                    )}
+                            >
+                                New token
+                            </button>`
+                        }
+                        ${
                             collab() &&
+                            !person.service &&
                             html`<button
                                 class="button small"
                                 title="Change what they can do"
@@ -388,11 +406,10 @@ function PeopleList() {
     </div>`;
 }
 
-/** The owner's way to make a guest for a program (Canfield's server, say): its token is shown here once. */
-function ServiceGuest() {
+/** The owner's way to make a guest for a program (Canfield's server, say): it has an API token and no login. */
+function ServiceGuest({ made, setMade }) {
     const [open, setOpen] = useState(false);
     const [name, setName] = useState("");
-    const [made, setMade] = useState(null);
     const [busy, setBusy] = useState(false);
 
     const reset = () => {
@@ -413,50 +430,50 @@ function ServiceGuest() {
             }
         });
 
+    if (made) {
+        return html`<div class="group">
+            <div class="group-title">API token for ${made.name}</div>
+            <p class="muted small">
+                Copy this token now: it is shown once and cannot be read again. ${made.name} cannot sign in; it reaches this server only with the token, as <span class="mono">Authorization: Bearer</span>. The token can steer Pi, which can run commands on this machine, and it skips the email code. Remove ${made.name} under People to end it, or press New token there to replace this one.
+            </p>
+            <input class="mono" readonly value=${made.token} onFocus=${(event) => event.target.select()} />
+            <button
+                class="button wide"
+                onClick=${() => copyText(made.token).then(() => notify("info", "Token copied"))}
+            >
+                Copy token
+            </button>
+            <button class="button ghost wide" onClick=${reset}>Done</button>
+        </div>`;
+    }
+
     if (!open) {
         return html`<button class="button ghost wide" onClick=${() => setOpen(true)}>
-            Add a service guest…
+            Invite a service guest (API token only)…
         </button>`;
     }
 
     return html`<div class="group">
         <div class="group-title">Service guest</div>
-        ${
-            made
-                ? html`<p class="muted small">
-                        Copy this token now: it is shown once and cannot be read again. Use it as a bearer token (<span class="mono">Authorization: Bearer</span>). It can steer Pi, which can run commands on this machine, and it skips the email code. Remove ${made.name} under People to end it.
-                    </p>
-                    <input class="mono" readonly value=${made.token} onFocus=${(event) => event.target.select()} />
-                    <button
-                        class="button wide"
-                        onClick=${() => copyText(made.token).then(() => notify("info", "Token copied"))}
-                    >
-                        Copy token
-                    </button>
-                    <button class="button ghost wide" onClick=${reset}>Done</button>`
-                : html`<p class="muted small">
-                        For a program such as another server, which cannot read an emailed code. Its token signs in without one, so keep it secret.
-                    </p>
-                    <input
-                        placeholder="Name, such as Canfield"
-                        maxlength="40"
-                        value=${name}
-                        onInput=${(event) => setName(event.target.value)}
-                    />
-                    <button
-                        class="button primary wide"
-                        disabled=${busy || name.trim() === ""}
-                        onClick=${create}
-                    >
-                        Make service guest
-                    </button>
-                    <button class="button ghost wide" onClick=${reset}>Cancel</button>`
-        }
+        <p class="muted small">
+            For a program such as another server. It cannot sign in and has no email code: it gets an API token, so keep that secret.
+        </p>
+        <input
+            placeholder="Name, such as Canfield"
+            maxlength="40"
+            value=${name}
+            onInput=${(event) => setName(event.target.value)}
+        />
+        <button class="button primary wide" disabled=${busy || name.trim() === ""} onClick=${create}>
+            Make service guest
+        </button>
+        <button class="button ghost wide" onClick=${reset}>Cancel</button>
     </div>`;
 }
 
 export function PeopleSheet() {
     const canInvite = canSteer() && !scoped();
+    const [made, setMade] = useState(null);
 
     return html`<${Sheet} title="People" onClose=${closeSheet}>
         ${
@@ -465,8 +482,8 @@ export function PeopleSheet() {
                 <${Icon} name="plus" size=${16} /> Invite someone
             </button>`
         }
-        <${PeopleList} />
-        ${store.state.me?.role === "owner" && html`<${ServiceGuest} />`}
+        <${PeopleList} onToken=${setMade} />
+        ${store.state.me?.role === "owner" && html`<${ServiceGuest} made=${made} setMade=${setMade} />`}
         <button
             class="button ghost wide sheet-footer"
             onClick=${() => openSheet({ type: "notifications" })}

@@ -1450,6 +1450,7 @@ export class PocketApp {
                 id: each.id,
                 name: each.name,
                 role: each.role,
+                ...(each.service === true ? { service: true } : {}),
                 online: this.#online(each.id),
                 ...(each.lastSeen === undefined ? {} : { lastSeen: each.lastSeen }),
                 ...(each.sessions === undefined || scope !== undefined

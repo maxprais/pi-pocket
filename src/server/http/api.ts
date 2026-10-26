@@ -754,6 +754,27 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, { id: made.id, name: made.name, token });
         }
 
+        if (
+            first === "service-guest" &&
+            second !== undefined &&
+            third === "token" &&
+            method === "POST"
+        ) {
+            requireOwner(user);
+
+            const renewed = app.config.renewServiceToken(second);
+
+            if (renewed === undefined) {
+                throw new HttpError(404, "No such service guest");
+            }
+
+            return json(response, 200, {
+                id: renewed.user.id,
+                name: renewed.user.name,
+                token: renewed.token,
+            });
+        }
+
         if (first === "invite" && second === "cancel" && method === "POST") {
             const body = (await readJson(request)) as { code?: unknown };
 
