@@ -124,7 +124,7 @@ export class Auth {
                 return this.#serviceUser(request);
             }
 
-            return this.#config.userBySession(token);
+            return this.#person(this.#config.userBySession(token));
         }
 
         if (token === undefined || token === "") {
@@ -137,11 +137,16 @@ export class Auth {
             return undefined;
         }
 
-        return this.#config.userByToken(token);
+        return this.#person(this.#config.userByToken(token));
+    }
+
+    /** A service guest is a program: it comes in by its bearer token alone, never as a person with a cookie. */
+    #person(user: User | undefined): User | undefined {
+        return user?.service === true ? undefined : user;
     }
 
     /**
-     * The one way past email sign-in: a guest marked `service` in `config.json`, with its login token as a bearer. Not
+     * The one way past email sign-in: a guest marked `service`, with its token as a bearer. Not
      * the owner, not a viewer, and not a person's own token with no mark.
      */
     #serviceUser(request: IncomingMessage): User | undefined {
@@ -158,7 +163,7 @@ export class Auth {
 
     /** Who a login token belongs to: for `/login`, which is the one place the token is still taken. */
     tokenUser(token: string): User | undefined {
-        return this.#config.userByToken(token);
+        return this.#person(this.#config.userByToken(token));
     }
 
     /**

@@ -431,6 +431,7 @@ test("a service guest's token works as a bearer with email sign-in on, and no on
 
     ownerOf(app).service = true;
     assert.equal((await me({ authorization: `Bearer ${app.config.ownerToken}` })).status, 401);
+    delete ownerOf(app).service;
 
     app.config.removeUser(service.user.id);
     assert.equal((await me({ authorization: `Bearer ${service.token}` })).status, 401);
@@ -462,4 +463,51 @@ test("only the owner makes a service guest, and its token then works as a bearer
 
     assert.equal(me.status, 200);
     assert.equal(app.config.userByToken(token)?.role, "guest");
+});
+
+test("a service guest cannot sign in as a person, and a new token ends the old one", async () => {
+    const owner = `pocket_auth=${app.config.addSession(ownerOf(app).id)}`;
+    const plain = app.config.addUser("Plain", "guest");
+    const call = (path: string, headers: Record<string, string>) =>
+        fetch(`${base}/api/${path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-pocket": "1", ...headers },
+            body: "{}",
+        });
+    const made = app.config.addServiceGuest("Canfield");
+
+    // Its token is no login link, and no cookie.
+    const login = await fetch(`${base}/login?token=${made.token}`, { redirect: "manual" });
+
+    assert.equal(login.status, 401);
+    assert.equal(
+        (await fetch(`${base}/api/me`, { headers: { cookie: `pocket_auth=${made.token}` } }))
+            .status,
+        401,
+    );
+
+    // The people list says which ones are service guests.
+    const people = (await (
+        await fetch(`${base}/api/users`, { headers: { cookie: owner } })
+    ).json()) as { id: string; service?: boolean }[];
+
+    assert.equal(people.find((each) => each.id === made.user.id)?.service, true);
+
+    // Only the owner renews one, and only a service guest's token.
+    assert.equal((await call(`service-guest/${made.user.id}/token`, {})).status, 401);
+    assert.equal(
+        (await call(`service-guest/${plain.user.id}/token`, { cookie: owner })).status,
+        404,
+    );
+
+    const renewed = await call(`service-guest/${made.user.id}/token`, { cookie: owner });
+
+    assert.equal(renewed.status, 200);
+
+    const { token } = (await renewed.json()) as { token: string };
+    const me = (bearer: string) =>
+        fetch(`${base}/api/me`, { headers: { authorization: `Bearer ${bearer}` } });
+
+    assert.equal((await me(made.token)).status, 401);
+    assert.equal((await me(token)).status, 200);
 });
