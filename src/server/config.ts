@@ -34,6 +34,12 @@ export interface User {
     budget?: number;
     /** Where their sign-in codes go, while email sign-in is on (`two-factor.ts`). */
     email?: string;
+    /**
+     * A guest that is a program, not a person (Canfield's server): while email sign-in is on, its login token still
+     * works as `Authorization: Bearer`, because no one can read an emailed code for it. Set only by hand in
+     * `config.json`; no route sets it, and it counts for guests alone.
+     */
+    service?: boolean;
 }
 
 /** A device signed in with an emailed code: its cookie holds the token, kept here by its hash. */
