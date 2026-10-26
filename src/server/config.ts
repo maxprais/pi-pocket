@@ -36,8 +36,8 @@ export interface User {
     email?: string;
     /**
      * A guest that is a program, not a person (Canfield's server): while email sign-in is on, its login token still
-     * works as `Authorization: Bearer`, because no one can read an emailed code for it. Set only by hand in
-     * `config.json`; no route sets it, and it counts for guests alone.
+     * works as `Authorization: Bearer`, because no one can read an emailed code for it. Made only by the owner,
+     * through `POST /api/service-guest`; it counts for guests alone.
      */
     service?: boolean;
 }
@@ -322,6 +322,16 @@ export class ConfigStore {
         this.save();
 
         return { user, token };
+    }
+
+    /** A guest that is a program (see `User.service`), and its token, which is shown once and never kept. */
+    addServiceGuest(name: string): { user: User; token: string } {
+        const made = this.addUser(name, "guest");
+
+        made.user.service = true;
+        this.save();
+
+        return made;
     }
 
     updateUser(

@@ -738,6 +738,22 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, { ok: true });
         }
 
+        if (first === "service-guest" && second === undefined && method === "POST") {
+            requireOwner(user);
+
+            const body = (await readJson(request)) as { name?: unknown };
+            const name = typeof body.name === "string" ? body.name.replace(/\s+/g, " ").trim() : "";
+
+            if (name === "" || name.length > 40) {
+                throw new HttpError(400, "Give the service guest a name of up to 40 characters.");
+            }
+
+            const { user: made, token } = app.config.addServiceGuest(name);
+
+            // The token is shown here and never again: only its hash is kept.
+            return json(response, 200, { id: made.id, name: made.name, token });
+        }
+
         if (first === "invite" && second === "cancel" && method === "POST") {
             const body = (await readJson(request)) as { code?: unknown };
 
