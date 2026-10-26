@@ -388,6 +388,73 @@ function PeopleList() {
     </div>`;
 }
 
+/** The owner's way to make a guest for a program (Canfield's server, say): its token is shown here once. */
+function ServiceGuest() {
+    const [open, setOpen] = useState(false);
+    const [name, setName] = useState("");
+    const [made, setMade] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    const reset = () => {
+        setOpen(false);
+        setName("");
+        setMade(null);
+    };
+
+    const create = () =>
+        attempt(async () => {
+            setBusy(true);
+
+            try {
+                setMade(await api("service-guest", { name }));
+                store.set({ users: await api("users") });
+            } finally {
+                setBusy(false);
+            }
+        });
+
+    if (!open) {
+        return html`<button class="button ghost wide" onClick=${() => setOpen(true)}>
+            Add a service guest…
+        </button>`;
+    }
+
+    return html`<div class="group">
+        <div class="group-title">Service guest</div>
+        ${
+            made
+                ? html`<p class="muted small">
+                        Copy this token now: it is shown once and cannot be read again. Use it as a bearer token (<span class="mono">Authorization: Bearer</span>). It can steer Pi, which can run commands on this machine, and it skips the email code. Remove ${made.name} under People to end it.
+                    </p>
+                    <input class="mono" readonly value=${made.token} onFocus=${(event) => event.target.select()} />
+                    <button
+                        class="button wide"
+                        onClick=${() => copyText(made.token).then(() => notify("info", "Token copied"))}
+                    >
+                        Copy token
+                    </button>
+                    <button class="button ghost wide" onClick=${reset}>Done</button>`
+                : html`<p class="muted small">
+                        For a program such as another server, which cannot read an emailed code. Its token signs in without one, so keep it secret.
+                    </p>
+                    <input
+                        placeholder="Name, such as Canfield"
+                        maxlength="40"
+                        value=${name}
+                        onInput=${(event) => setName(event.target.value)}
+                    />
+                    <button
+                        class="button primary wide"
+                        disabled=${busy || name.trim() === ""}
+                        onClick=${create}
+                    >
+                        Make service guest
+                    </button>
+                    <button class="button ghost wide" onClick=${reset}>Cancel</button>`
+        }
+    </div>`;
+}
+
 export function PeopleSheet() {
     const canInvite = canSteer() && !scoped();
 
@@ -399,6 +466,7 @@ export function PeopleSheet() {
             </button>`
         }
         <${PeopleList} />
+        ${store.state.me?.role === "owner" && html`<${ServiceGuest} />`}
         <button
             class="button ghost wide sheet-footer"
             onClick=${() => openSheet({ type: "notifications" })}
