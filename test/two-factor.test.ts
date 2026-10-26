@@ -412,3 +412,26 @@ test("a bad address is refused, and one client gets only a few tries", async () 
     );
     assert.deepEqual(statuses.slice(10), [429, 429]);
 });
+
+test("a service guest's token works as a bearer with email sign-in on, and no one else's does", async () => {
+    const me = (headers: Record<string, string>) => fetch(`${base}/api/me`, { headers });
+    const service = app.config.addUser("Canfield", "guest");
+    const plain = app.config.addUser("Plain", "guest");
+    const viewer = app.config.addUser("Viewer", "viewer");
+
+    // Set by hand, as in config.json: no method sets it.
+    service.user.service = true;
+    viewer.user.service = true;
+
+    assert.equal((await me({ authorization: `Bearer ${service.token}` })).status, 200);
+    assert.equal((await me({ authorization: `Bearer ${plain.token}` })).status, 401);
+    assert.equal((await me({ authorization: `Bearer ${viewer.token}` })).status, 401);
+    assert.equal((await me({ authorization: "Bearer nope" })).status, 401);
+    assert.equal((await me({ cookie: `pocket_auth=${service.token}` })).status, 401);
+
+    ownerOf(app).service = true;
+    assert.equal((await me({ authorization: `Bearer ${app.config.ownerToken}` })).status, 401);
+
+    app.config.removeUser(service.user.id);
+    assert.equal((await me({ authorization: `Bearer ${service.token}` })).status, 401);
+});

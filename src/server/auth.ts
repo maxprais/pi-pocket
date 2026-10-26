@@ -120,9 +120,11 @@ export class Auth {
         // With email sign-in on, the login token never signs anything in by itself: a cookie or header that carries it
         // is not a session, so the emailed code cannot be skipped by setting the cookie by hand.
         if (this.twoFactor !== undefined) {
-            return token === undefined || token === ""
-                ? undefined
-                : this.#config.userBySession(token);
+            if (token === undefined || token === "") {
+                return this.#serviceUser(request);
+            }
+
+            return this.#config.userBySession(token);
         }
 
         if (token === undefined || token === "") {
@@ -136,6 +138,22 @@ export class Auth {
         }
 
         return this.#config.userByToken(token);
+    }
+
+    /**
+     * The one way past email sign-in: a guest marked `service` in `config.json`, with its login token as a bearer. Not
+     * the owner, not a viewer, and not a person's own token with no mark.
+     */
+    #serviceUser(request: IncomingMessage): User | undefined {
+        const bearer = String(request.headers.authorization ?? "");
+
+        if (!bearer.startsWith("Bearer ")) {
+            return undefined;
+        }
+
+        const user = this.#config.userByToken(bearer.slice(7).trim());
+
+        return user?.service === true && user.role === "guest" ? user : undefined;
     }
 
     /** Who a login token belongs to: for `/login`, which is the one place the token is still taken. */
