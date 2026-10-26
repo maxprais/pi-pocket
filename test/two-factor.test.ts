@@ -435,3 +435,31 @@ test("a service guest's token works as a bearer with email sign-in on, and no on
     app.config.removeUser(service.user.id);
     assert.equal((await me({ authorization: `Bearer ${service.token}` })).status, 401);
 });
+
+test("only the owner makes a service guest, and its token then works as a bearer", async () => {
+    const post = (headers: Record<string, string>, body: unknown) =>
+        fetch(`${base}/api/service-guest`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-pocket": "1", ...headers },
+            body: JSON.stringify(body),
+        });
+    const guest = app.config.addUser("Plain guest", "guest");
+    const session = `pocket_auth=${app.config.addSession(ownerOf(app).id)}`;
+
+    assert.equal((await post({}, { name: "Canfield" })).status, 401);
+    assert.equal(
+        (await post({ authorization: `Bearer ${guest.token}` }, { name: "X" })).status,
+        401,
+    );
+    assert.equal((await post({ cookie: session }, { name: " " })).status, 400);
+
+    const made = await post({ cookie: session }, { name: "Canfield" });
+
+    assert.equal(made.status, 200);
+
+    const { token } = (await made.json()) as { token: string };
+    const me = await fetch(`${base}/api/me`, { headers: { authorization: `Bearer ${token}` } });
+
+    assert.equal(me.status, 200);
+    assert.equal(app.config.userByToken(token)?.role, "guest");
+});
