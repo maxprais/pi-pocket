@@ -114,7 +114,27 @@ export default function createCanfield(host: Host) {
         parameters: Type.Object({
             runId,
             name: Type.String(),
+            cqcProviderId: Type.Optional(
+                Type.String({
+                    description:
+                        "The CQC provider id. Always pass it when you have it, so later saves update the same provider.",
+                }),
+            ),
             companyNumber: Type.Optional(Type.String()),
+            contactStatus: Type.Optional(
+                Type.Union(
+                    [
+                        Type.Literal("found"),
+                        Type.Literal("no_email_on_site"),
+                        Type.Literal("site_unreachable"),
+                        Type.Literal("not_searched"),
+                    ],
+                    {
+                        description:
+                            "Why there is or is no email: found, no_email_on_site (read the site, none listed), site_unreachable, or not_searched (not looked at yet).",
+                    },
+                ),
+            ),
             website: Type.Optional(Type.String()),
             emails: Type.Optional(
                 Type.Array(
@@ -160,15 +180,51 @@ export default function createCanfield(host: Host) {
     const report = defineTool({
         name: "canfield_report",
         description:
-            'Report progress ("progress") or finish the run ("done" or "failed") with a short message.',
+            'Report progress ("progress") or end the run: "done" only when everything was checked, "partial" when work is left, "failed" when it could not run. Always pass coverageChecked and coverageTotal when you know them. On "done" or "partial" also pass outcome.',
         parameters: Type.Object({
             runId,
             status: Type.Union([
                 Type.Literal("progress"),
                 Type.Literal("done"),
+                Type.Literal("partial"),
                 Type.Literal("failed"),
             ]),
-            message: Type.String({ maxLength: 10000 }),
+            message: Type.String({
+                maxLength: 10000,
+                description: "Markdown: a one-line headline, then short bullet lists.",
+            }),
+            coverageChecked: Type.Optional(Type.Number({ minimum: 0 })),
+            coverageTotal: Type.Optional(Type.Number({ minimum: 0 })),
+            outcome: Type.Optional(
+                Type.Object({
+                    counts: Type.Optional(
+                        Type.Object({
+                            checked: Type.Number({ minimum: 0 }),
+                            total: Type.Number({ minimum: 0 }),
+                            saved: Type.Number({ minimum: 0 }),
+                            needsReview: Type.Number({ minimum: 0 }),
+                        }),
+                    ),
+                    unchecked: Type.Optional(
+                        Type.Array(
+                            Type.Object({
+                                name: Type.String(),
+                                providerId: Type.Optional(Type.String()),
+                                reason: Type.Optional(Type.String()),
+                            }),
+                        ),
+                    ),
+                    failedPages: Type.Optional(
+                        Type.Array(
+                            Type.Object({
+                                council: Type.String(),
+                                page: Type.Number({ minimum: 0 }),
+                                failed: Type.Optional(Type.Number({ minimum: 0 })),
+                            }),
+                        ),
+                    ),
+                }),
+            ),
         }),
         replay: "safe",
         execute: async (args, api, context) => {
